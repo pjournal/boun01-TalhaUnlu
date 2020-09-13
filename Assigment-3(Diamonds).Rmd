@@ -1,0 +1,281 @@
+0---
+title: "Assigment3"
+author: "Talha Ünlü"
+date: "09 09 2020"
+output: 
+  html_document:
+    code_folding: hide    
+    toc: yes
+    toc_depth: 3
+    toc_float:
+      collapsed: no
+    theme: united
+    highlight: tango
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<style>
+#TOC {
+ color: 
+ font-family: Calibri;
+ background-color:
+ border-color: darkred;
+}
+#header {
+ color: darkred;
+ font-family: Calibri;
+ background-color:
+}
+body {
+ font-family: Calibri;
+ }
+ 
+</style>
+
+
+
+
+# Introduction
+## About the "diamonds" dataset:
+
+The dataset contains information on prices of diamonds, as well as various attributes of diamonds, some of which are known to influence their price (in 2008 $s): the 4 Cs (carat, cut, color, and clarity) , as well as some physical measurements (depth, table, price, x, y, and z).Carat is a unit of mass equal to 200 mg and is used for measuring gemstones and pearls. Cut grade is is an objective measure of a diamond’s light performance, or, what we generally think of as sparkle.
+
+## Objectives 
+
+In this assigment, we will first examine our data in general terms and then try to get more inside information in the explatory data analysis (EDA) section. Our aim in the part up to now is to know our data and to have information about variables. In the next step, we will try to establish a model. Before starting to set up a model, we will do the PCA (Princible Component Analysis) study, and finally, we will evaluate our results by establishing our model using different algorithms to check each other.
+  
+  1.Overview of the Data
+  2.Explotory Data Analysis (EDA)
+  3.Princible Components Analysis (PCA)
+  4.Establishing & Evaluating the Models 
+
+
+# Data Explanation
+
+## Used Libraries
+I have used several packages during the analysis of the **diamonds** dataset in order to make data manipulation and visualization. The list of packages used in this assignment can be seen below:
+  
+  1.tidyverse
+  2.readr
+  3.ggplot2
+  4.cvms
+  5.broom
+  6.tree
+  7.randomForest
+
+```{r library, include=FALSE,echo=FALSE}
+  library(tidyverse)
+  library(readr)
+  library(ggplot2)
+  library(cvms)
+  library(broom)    
+  library(tree)
+  library(randomForest)
+```
+
+
+## Data
+
+I used to *glimpse()* function in order to investigate the **diamonds** dataset.The *glimpse()* is a function of *dplyr* package.
+
+```{r glimpse}
+
+diamonds%>%
+  glimpse()
+```
+
+## Summary of Data
+```{r summary}
+summary(diamonds)
+```
+
+
+## Explotory Data Analysis (EDA)
+
+I created a new variable called volume using x, y and z dependent variables. The aim here is to find the relationship between diamond's volume and price, and try to obtain different information with the variable we created.
+
+```{r Volume vs Prices}
+diamond.update<-diamonds%>%
+  mutate(volume=x*y*z)
+
+ggplot(diamond.update,aes(volume,price,color=color)) +
+  geom_point()+
+  xlim(25,100)+
+  labs(title = "Volume vs Price",
+       x="Volume of Diamonds",
+       y="Prices of Diamonds" )
+  
+```
+When we examine the chart above, although it seems that there are exceptions, we observe that the price of the diamond increases as the color of the diamond gets darker in the range where the number of diamonds is intense.
+
+
+```{r clarity vs price}
+ggplot(diamond.update,aes(clarity,price,color=cut))+
+  geom_jitter()+
+  theme_minimal() +
+  theme( plot.title = element_text(vjust = 0.5)) +
+  labs(x = "Clarity Levels",
+       y = "Prices",
+       title = "Clarity vs Price",
+       subtitle = "Levels: I1 < SI2 < SI1 < VS2 < VS1 < VVS2 < VVS1 < IF")
+
+```
+When we examine the chart above, we see that there are expensive and cheap diamonds at almost every clarity level. Also, when the price goes up, there are quite a few diamonds at I1 and IF clarity levels compared to other levels.
+
+
+After the first two charts, I decided to categorize the price. I categorized Price variables as "Very Low", "Low", "Medium", "High" and "Very High" using the case_when () function.
+```{r price group}
+quant = quantile(diamond.update$price, seq(0, 1, 0.2))
+
+diamonds_price_group <- diamond.update %>%
+  mutate(price_group = case_when(
+    price < quant[2] ~ "Very Low",
+    price < quant[3] ~ "Low",
+    price < quant[4] ~ "Medium",
+    price < quant[5] ~ "High",
+    TRUE ~ "Very High"
+  )) %>%
+  mutate(price_group = factor(price_group, levels = c("Very Low", "Low", "Medium", "High", "Very High")))
+
+```
+I have created another variable called price_group and now I will continue to examine the price clarity relation using this variable.
+
+
+```{r price group visualization}
+
+diamonds_price_group%>%
+  group_by(price_group)%>%
+  summarise(count=n())%>%
+mutate(percentage=100*count/sum(count))
+
+
+
+diamonds_price_group %>%
+  group_by(clarity, price_group) %>%
+  summarize(counter = n())  %>%
+  ggplot(., aes(x = '', y = counter, fill = price_group)) + 
+  geom_bar(width = 1, stat = "identity", position = "fill") +
+  coord_polar("y") +
+  theme_void() +
+  theme(plot.title = element_text(vjust = 0.5)) +
+  facet_wrap(~clarity) +
+  labs(title = "Price Group Analyses of Clarity",
+       fill = "Price Group")
+
+```
+As you seen above, pie charts was created in terms of price_group. Consequently, i could observe distribution of clarity levels for each price group.
+
+# Establishing Predictive Models
+In this assigment, i first performed PC analysis then I created models using linear model and randomForest algorithms.
+
+## Preparing the Test&Training Datasets
+
+I have defined our test and train datasets as given in Assigment 3.3 description.
+```{r reading the datasets}
+
+set.seed(503)
+diamonds_test <- diamonds %>% mutate(diamond_id = row_number()) %>% 
+    group_by(cut, color, clarity) %>% sample_frac(0.2) %>% ungroup()
+
+diamonds_train <- anti_join(diamonds %>% mutate(diamond_id = row_number()), 
+    diamonds_test, by = "diamond_id")
+
+diamonds_train
+
+```
+## Princible Component Analysis (PCA)
+
+Principal Component Analysis (PCA) is a useful technique for exploratory data analysis, allowing you to better visualize the variation present in a dataset with many variables. It is particularly helpful in the case of "wide" datasets, where you have many variables for each sample.
+[Read more](https://www.datacamp.com/community/tutorials/pca-analysis-r) 
+
+
+In order to do PC analysis, my variables must be numeric, so we make our variables numeric.
+```{r data preparation for pca}
+diamonds.all<-diamonds%>%
+  mutate(color=as.numeric(color),cut=as.numeric(cut),clarity=as.numeric(clarity))
+```
+
+```{r pca}
+diamond.pca<-princomp(diamonds.all,cor=TRUE,scores = TRUE)
+summary(diamond.pca)
+diamond.pca$loadings
+```
+As can be seen in Cumulative Proportion, the first five components can explain 94.3% of variation.
+
+
+```{r pca plot}
+ggplot(data.frame(pc=1:7,cum_var=c(0.5006871,0.6444264,0.7678156 ,0.86643500,0.94348327,0.97930758,0.99208314 )),aes(x=pc,y=cum_var)) +
+  geom_point() + 
+  geom_line()
+```
+
+
+## Linear Regression Modelling
+
+Linear models describe a continuous response variable as a function of one or more predictor variables.So i used linear regression in prediction model.
+```{r linear modelling}
+
+fmla<-price~carat+cut+color+clarity+depth+table+x+y+z
+
+Diamond.lm.model<-lm(fmla,diamonds_train)
+diamonds_test$lmprediction<-predict(Diamond.lm.model,newdata = diamonds_test)
+
+```
+
+The linear model's r square value is 92%. He says that our model works pretty well and is a statistically logical predict.
+```{r Evaluation of the linear model}
+summary(Diamond.lm.model)
+lm.rsquared<-1 - (sum((diamonds_test$lmprediction-diamonds_test$price)^2)/sum((diamonds_test$price-mean(diamonds_test$price))^2))
+lm.rsquared # 0.9207
+```
+
+```{r linear modelling visualization }
+ggplot(diamonds_test,aes(lmprediction,price,alpha=0.6)) +
+  geom_point(color="darkblue")+
+  geom_abline(color="red",size=1.2)+
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(vjust = 0.5))+
+  ggtitle("lm-Predictions vs Actual Prices")
+ 
+```
+We observe that as the price increases, the accuracy of the model decreases. However, our model works very well in the price range that covers a large proportion of our data.
+
+
+## Random Forest Regression
+In the random forest approach, a large number of decision trees are created. Every observation is fed into every decision tree. The most common outcome for each observation is used as the final output. A new observation is fed into all the trees and taking a majority vote for each classification model.
+[read more](https://www.tutorialspoint.com/r/r_random_forest.htm#:~:text=In%20the%20random%20forest%20approach,vote%20for%20each%20classification%20model.)
+
+
+```{r randomforest}
+ 
+  Diamond.rf.model<-randomForest(fmla,data=diamonds_train,ntree=200)
+  diamonds_test$rfprediction<-predict(Diamond.rf.model,newdata=diamonds_test)
+  print(error<-sqrt(mean((diamonds_test$rfprediction-diamonds_test$price)^2)))
+
+```
+
+It is expected to perform more accurate prediction since it creates many decision trees in the randomForest algorithm and can include most of the observations in the model. As a matter of fact, the r square value is quite high at 97.9%.
+```{r randomForest summary & r.squared}
+
+rf.rsquared<-1 - (sum((diamonds_test$rfprediction-diamonds_test$price)^2)/sum((diamonds_test$price-mean(diamonds_test$price))^2))
+rf.rsquared #0.9797688
+```
+
+```{r randomForest Visualization}
+
+ggplot(diamonds_test,aes(rfprediction,price))+
+  geom_point(color="darkblue")+
+  geom_abline(color="red",size=1)+
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(vjust = 0.5))+
+  ggtitle("rf-Predictions vs Actual Prices")
+```
+
+
+
