@@ -5,4 +5,4 @@
 
 ## Assigment 3
 
-[Assigment-3(Diamonds)](https://pjournal.github.io/boun01-TalhaUnlu/Assigment3(Diamonds),html)
+[Assigment-3(Diamonds)](https://pjournal.github.io/boun01-TalhaUnlu/Assigment3(Diamonds).html)
